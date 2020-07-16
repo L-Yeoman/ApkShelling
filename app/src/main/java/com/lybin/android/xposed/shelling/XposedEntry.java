@@ -3,9 +3,11 @@
  * 2019-07-26 Oak Chen  Created
  */
 
-package com.sfysoft.android.xposed.shelling;
+package com.lybin.android.xposed.shelling;
 
 import android.annotation.SuppressLint;
+import android.os.Build;
+
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -22,13 +24,14 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Set;
 
-/**
- * Xposed entry to shelling app
- *
- * @author Oak Chen
- */
+
 public class XposedEntry implements IXposedHookLoadPackage {
     private static final boolean DEBUG = false;
+    private static int sdkInit;
+
+    static {
+        sdkInit = Build.VERSION.SDK_INT;
+    }
     /**
      * 加固应用的初始类，对应AndroidManifests.xml里的<application android:name的值
      * com.stub.StubApp 360加固
@@ -46,8 +49,7 @@ public class XposedEntry implements IXposedHookLoadPackage {
     /**
      * 拟脱壳的App包名，对应AndroidManifests.xml里的<manifest package的值
      */
-    private static final String[] targetPackages =
-            new String[]{"com.sfysoft.shellingtest", "com.sfysoft.shellingtest2","com.example.testdemo"};
+
 
     private static void log(String text) {
         XposedBridge.log("ApkShelling__"+text);
@@ -63,39 +65,37 @@ public class XposedEntry implements IXposedHookLoadPackage {
         log("Load package: " + packageName);
 
         boolean found = false;
-      /*  for (String targetPackage : targetPackages) {
-            if (packageName.equals(targetPackage)) {
-                found = true;
+
+        for (String application : PACKED_APP_ENTRIES) {
+            Class cls = XposedHelpers.findClass(application, lpparam.classLoader);
+            if (cls != null && sdkInit>=26) {
+                log("sdkInit>=26,Found " + application);
+                String path = "/data/data/" + packageName + "/dump";
+                File parent = new File(path);
+                if (!parent.exists() || !parent.isDirectory()) {
+                    parent.mkdirs();
+                }
+                Native.test(packageName);
                 break;
+            }else if(cls != null){
+                log("sdkInit<26,Found " + application);
+                initDump(lpparam);
+            }else{
+                log("cls is null");
             }
         }
+    }
 
-        if (!found) {
-            log("not Found:" + packageName);
-            return;
-        }*/
+    private void initDump(XC_LoadPackage.LoadPackageParam lpparam){
 
-//        for (String application : PACKED_APP_ENTRIES) {
-            String application = lpparam.packageName;
-//            Class cls = XposedHelpers.findClassIfExists("com.example.testdemo", lpparam.classLoader);
-//            Class cls = XposedHelpers.findClass(application, lpparam.classLoader);
-
-//            if (cls != null) {
-                log("Found " + application);
-                ClassLoaderHook hook;
-                try {
-                    hook = new ClassLoaderHook(getSavingPath(packageName));
-                    //3.hook  ClassLoader的loadClass方法
-                    XposedHelpers.findAndHookMethod("java.lang.ClassLoader", lpparam.classLoader,
-                                                    "loadClass", String.class, boolean.class, hook);
-                } catch (NoSuchMethodException | ClassNotFoundException e) {
-                    log(e);
-                }
-//                break;
-//            }else{
-//                log("cls is null");
-//            }
-//        }
+        ClassLoaderHook hook;
+        try {
+            hook = new ClassLoaderHook(getSavingPath(lpparam.packageName));
+            //3.hook  ClassLoader的loadClass方法
+            XposedHelpers.findAndHookMethod("java.lang.ClassLoader", lpparam.classLoader, "loadClass", String.class, boolean.class, hook);
+        } catch (NoSuchMethodException | ClassNotFoundException e) {
+            log(e);
+        }
     }
 
     @SuppressWarnings("SameParameterValue")
@@ -147,7 +147,7 @@ public class XposedEntry implements IXposedHookLoadPackage {
             if (cls == null) {
                 return;
             }
-
+            log("afterHookedMethod---className:"+cls.getName());
             if (shouldSkip(cls.getName())) {
                 return;
             }
